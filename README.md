@@ -21,17 +21,23 @@ DITA already has two ways to pull a text file into a codeblock: `<coderef>` (DIT
 
 | | Stock `<coderef>` | Stock `<include parse="text">` | With this plugin |
 | --- | --- | --- | --- |
-| Local file | Included | Included in DITA 2.0 topics. DITA 1.3 topics reject the element. DITA-OT also tries to parse the file as XML and logs DOTJ013E | Included, inside `codeinclude.local.root` only |
+| Local file | Included | Included in DITA 2.0 topics. DITA 1.3 topics reject the element with DOTJ088E. Without `@format`, DITA-OT also tries to parse the file as XML and logs DOTJ013E, then includes it anyway | Included, inside `codeinclude.local.root` only |
 | Remote `https://` file | Dropped: empty codeblock, no error | Dropped: empty codeblock, no error | Fetched, from allowed hosts only |
 | GitHub, GitLab, Bitbucket and Gitea "view file" URLs | Not fetched | Not fetched | Rewritten to the raw file and fetched |
 | `#line-range(13,19)`, `#line=12,19`, `#token=A,B` | Supported | Supported | Supported, local and remote |
 | `#L13-L19` (copied from GitHub) | Ignored: the whole file is included | Ignored: the whole file is included | Supported |
 | Syntax highlighting | None | None | At build time, in HTML5 and PDF, for about 40 languages |
-| `language-x` class from the file name | No | No | Yes, so highlight.js or Prism can also take over |
-| Missing file | Error, empty codeblock, build continues | Error, empty codeblock, build continues | Warning, or a failed build with `codeinclude.fail-on-error=yes` |
+| `language-x` class from the file name | No. Set `outputclass` by hand | No. `format="yaml"` is not mapped to a class, so set `outputclass` by hand | Yes, so highlight.js or Prism can also take over |
+| Missing file | Error, empty codeblock, build continues | Error, empty codeblock, build continues. `<fallback>` is not shown | Warning, or a failed build with `codeinclude.fail-on-error=yes` |
+| `<fallback>` | Not available | Appended after the included content when the file is found, and dropped when it is missing. This is the reverse of what the spec describes | Not applicable: the plugin handles `<coderef>` only |
 | Line range past the end of the file | Empty codeblock, no message | Empty codeblock, no message | CINC007 warning, or a failed build with `codeinclude.fail-on-error=yes` |
 
 If your code files are local and you don't need highlighting, stock `<coderef>` is enough and you don't need this plugin.
+
+Stock DITA-OT can also be highlighted without this plugin, as long as you write `outputclass="language-yaml"` on each `<codeblock>` yourself. DITA-OT copies the class onto the HTML `<pre>`, where either of these picks it up for `<coderef>` and `<include>` content:
+
+- The [fox.jason.prismjs](https://github.com/jason-fox/fox.jason.prismjs) plugin highlights at build time, in HTML5 and PDF.
+- highlight.js or Prism loaded through `--args.hdf` highlights in the browser, in HTML5 only, and the page needs the script to load.
 
 ## Install
 
