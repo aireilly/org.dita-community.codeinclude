@@ -1,4 +1,4 @@
-# org.dita-community.codeinclude
+# org.community.codeinclude
 
 A DITA Open Toolkit plugin that pulls code files into `<codeblock>` through `<coderef href="...">` and highlights them in the language of the file. The href can be a local path or an `http(s)` URL, so a YAML file sitting in a GitHub repository can be documented without copying it into your source tree.
 
@@ -13,10 +13,12 @@ The plugin fetches the raw file, sees `.yaml`, adds `outputclass="language-yaml"
 
 Requires DITA-OT 4.x (Saxon HE 12, XSLT 3.0).
 
+Example output: [org.community.codeinclude](https://aireilly.github.io/org.community.codeinclude/)
+
 ## Install
 
 ```sh
-dita install org.dita-community.codeinclude-1.0.0.zip
+dita install org.community.codeinclude-1.0.0.zip
 ```
 
 or unzip into `plugins/` and run `dita install`.
@@ -26,7 +28,7 @@ or unzip into `plugins/` and run `dita install`.
 Anything the built-in coderef accepts still works. On top of that:
 
 | href | Result |
-|---|---|
+| --- | --- |
 | `code/app.yaml` | Local file, resolved the way DITA-OT does it |
 | `https://raw.githubusercontent.com/o/r/main/app.yaml` | Fetched as is |
 | `https://github.com/o/r/blob/main/app.yaml` | Rewritten to `raw.githubusercontent.com` |
@@ -43,7 +45,7 @@ Prefer a commit hash over a branch name in remote URLs (`/blob/3f9c2e1.../config
 The fragment picks part of the file. These work for local and remote files:
 
 | Fragment | Meaning |
-|---|---|
+| --- | --- |
 | `#L13-L19`, `#L13` | GitHub style, 1-based, inclusive. Copy it straight from the GitHub UI. |
 | `#line-range(13,19)` | DITA-OT style, 1-based, inclusive |
 | `#line=12,19` | RFC 5147 line positions |
@@ -69,7 +71,7 @@ Inline code works too. A codeblock with `outputclass="language-json"` and no cod
 Pass them with `--name=value` on the `dita` command line.
 
 | Parameter | Default | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `codeinclude.enabled` | `yes` | `no` hands coderef back to the built-in resolver and switches the plugin off |
 | `codeinclude.remote` | `yes` | `no` skips URL fetches (offline builds); a warning is logged per skipped coderef |
 | `codeinclude.highlight` | `yes` | `no` keeps the include and the `language-x` class but drops build-time tokens, for sites that use highlight.js or Prism |
@@ -152,6 +154,5 @@ Adding a language means adding an entry to `$ci:aliases` and `$ci:spec` in `xsl/
 `samples/codeinclude-sample.ditamap` covers the GitHub URL above, a line range, local YAML, JSON and shell files, and a forced language.
 
 ```sh
-dita -i plugins/org.dita-community.codeinclude/samples/codeinclude-sample.ditamap -f html5 -o out
+dita -i plugins/org.community.codeinclude/samples/codeinclude-sample.ditamap -f html5 -o out
 ```
-# org.community.codeinclude
