@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="org.dita-community.codeinclude"
+         xmlns:if="ant:if"
+         xmlns:unless="ant:unless">
+
+  <!--
+    Runs first in preprocessing. Unless the plugin is switched off, the
+    built-in coderef resolver is disabled so that coderef elements survive
+    into the temporary files, where this plugin resolves them (local files
+    and remote URLs alike) and highlights the result.
+  -->
+  <target name="codeinclude.init">
+    <condition property="codeinclude.skip">
+      <isfalse value="${codeinclude.enabled}"/>
+    </condition>
+    <!-- build-step.coderef is the supported switch; setting preprocess.coderef.skip directly fails with DOTA015F -->
+    <property name="build-step.coderef" value="false" unless:set="codeinclude.skip"/>
+    <property name="codeinclude.remote" value="yes"/>
+    <property name="codeinclude.highlight" value="yes"/>
+    <property name="codeinclude.default-language" value=""/>
+    <property name="codeinclude.charset" value="UTF-8"/>
+    <property name="codeinclude.fail-on-error" value="no"/>
+    <property name="codeinclude.html.css" value="inline"/>
+    <!-- Security policy (see README, "Security") -->
+    <property name="codeinclude.local.root" value=""/>
+    <property name="codeinclude.remote.allow-hosts" value="github.com raw.githubusercontent.com gitlab.com bitbucket.org codeberg.org"/>
+    <property name="codeinclude.remote.allow-http" value="no"/>
+    <property name="codeinclude.remote.require-pinned" value="warn"/>
+    <property name="codeinclude.max-size" value="1048576"/>
+  </target>
+
+  <target name="codeinclude.process"
+          unless="codeinclude.skip"
+          description="Resolve coderef (local and remote) and highlight code blocks">
+    <makeurl file="${dita.temp.dir}/.job.xml" property="codeinclude.job.url" validate="false"/>
+    <makeurl file="${dita.temp.dir}" property="codeinclude.temp.url" validate="false"/>
+    <pipeline message="Resolve code references and highlight code" taskname="codeinclude">
+      <xslt basedir="${dita.temp.dir}"
+            style="${dita.plugin.org.dita-community.codeinclude.dir}/xsl/codeinclude.xsl"
+            parallel="${parallel}">
+        <ditafileset format="dita" processingRole="normal"/>
+        <param name="job-url" expression="${codeinclude.job.url}"/>
+        <param name="temp-dir-url" expression="${codeinclude.temp.url}"/>
+        <param name="remote" expression="${codeinclude.remote}"/>
+        <param name="highlight" expression="${codeinclude.highlight}"/>
+        <param name="default-language" expression="${codeinclude.default-language}"/>
+        <param name="default-charset" expression="${codeinclude.charset}"/>
+        <param name="fail-on-error" expression="${codeinclude.fail-on-error}"/>
+        <param name="processing-mode" expression="${processing-mode}" if:set="processing-mode"/>
+        <param name="input" expression="${args.input}" if:set="args.input"/>
+        <param name="input-dir" expression="${args.input.dir}" if:set="args.input.dir"/>
+        <param name="local-root" expression="${codeinclude.local.root}"/>
+        <param name="allow-hosts" expression="${codeinclude.remote.allow-hosts}"/>
+        <param name="allow-http" expression="${codeinclude.remote.allow-http}"/>
+        <param name="require-pinned" expression="${codeinclude.remote.require-pinned}"/>
+        <param name="max-size" expression="${codeinclude.max-size}"/>
+      </xslt>
+    </pipeline>
+  </target>
+
+</project>

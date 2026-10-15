@@ -1,0 +1,4 @@
+{
+  "name": "demo", "replicas": 3, "enabled": true, "ratio": -1.5e3,
+  "tags": ["a", "b\"c"], "owner": null
+}

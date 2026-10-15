@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Code include and syntax highlighting for DITA-OT.
+
+  Resolves <coderef href="..."/> inside <codeblock> from local files or
+  remote URLs (GitHub/GitLab/Bitbucket/Gitea "blob" links are rewritten to
+  raw links), detects the language from the file name, and highlights the
+  code at build time so that HTML5 and PDF both get coloured output.
+-->
+<plugin id="org.dita-community.codeinclude" version="1.0.0">
+  <require plugin="org.dita.base"/>
+
+  <!-- Ant targets -->
+  <feature extension="dita.conductor.target.relative" file="conductor.xml"/>
+  <!-- Runs before every preprocess variant (preprocess, preprocess2, preprocess2-topic) -->
+  <feature extension="depend.preprocess.pre" value="codeinclude.init"/>
+  <!-- Runs after every preprocess variant, once temp topics are final -->
+  <feature extension="depend.preprocess.post" value="codeinclude.process"/>
+
+  <!-- Rendering -->
+  <feature extension="dita.xsl.html5" file="xsl/html5.xsl"/>
+  <feature extension="dita.conductor.html5.param" file="html5-params.xml"/>
+  <feature extension="dita.xsl.xslfo" file="xsl/xslfo.xsl"/>
+
+  <!-- Parameters (declared on the abstract base so the dita CLI accepts them for every format) -->
+  <transtype name="base" abstract="true">
+    <param name="codeinclude.enabled" type="enum"
+           desc="Resolve coderef with this plugin instead of the built-in resolver.">
+      <val default="true">yes</val>
+      <val>no</val>
+    </param>
+    <param name="codeinclude.remote" type="enum"
+           desc="Fetch coderef targets that are http(s) URLs.">
+      <val default="true">yes</val>
+      <val>no</val>
+    </param>
+    <param name="codeinclude.highlight" type="enum"
+           desc="Apply build-time syntax highlighting to codeblocks with a known language.">
+      <val default="true">yes</val>
+      <val>no</val>
+    </param>
+    <param name="codeinclude.default-language" type="string"
+           desc="Language used when none can be detected (for example 'yaml'). Empty means plain text."/>
+    <param name="codeinclude.charset" type="string"
+           desc="Character set for included files when coderef/@format does not name one. Default UTF-8."/>
+    <param name="codeinclude.fail-on-error" type="enum"
+           desc="Stop the build when an included file cannot be read.">
+      <val>yes</val>
+      <val default="true">no</val>
+    </param>
+    <param name="codeinclude.html.css" type="enum"
+           desc="Embed the highlighting stylesheet in HTML pages that contain highlighted code.">
+      <val default="true">inline</val>
+      <val>none</val>
+    </param>
+    <param name="codeinclude.local.root" type="string"
+           desc="Directory local coderef targets must be inside. Default: the directory of the input map. '*' removes the limit."/>
+    <param name="codeinclude.remote.allow-hosts" type="string"
+           desc="Space-separated host names remote coderefs may fetch from. '*' allows any public host."/>
+    <param name="codeinclude.remote.allow-http" type="enum"
+           desc="Allow unencrypted http URLs.">
+      <val>yes</val>
+      <val default="true">no</val>
+    </param>
+    <param name="codeinclude.remote.require-pinned" type="enum"
+           desc="Remote URLs that name a branch instead of a commit hash: warn, refuse (yes) or accept (no).">
+      <val default="true">warn</val>
+      <val>yes</val>
+      <val>no</val>
+    </param>
+    <param name="codeinclude.max-size" type="string"
+           desc="Largest file, in characters, that a coderef may include. Default 1048576."/>
+  </transtype>
+</plugin>
