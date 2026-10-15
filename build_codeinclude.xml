@@ -11,7 +11,8 @@
   -->
   <target name="codeinclude.init">
     <condition property="codeinclude.skip">
-      <isfalse value="${codeinclude.enabled}"/>
+      <!-- isfalse would treat the unexpanded "${codeinclude.enabled}" as false when the parameter is not passed -->
+      <equals arg1="${codeinclude.enabled}" arg2="no"/>
     </condition>
     <!-- build-step.coderef is the supported switch; setting preprocess.coderef.skip directly fails with DOTA015F -->
     <property name="build-step.coderef" value="false" unless:set="codeinclude.skip"/>
