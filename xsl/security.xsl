@@ -13,7 +13,8 @@
     * encoded dots, slashes, backslashes and NUL (%2e %2f %5c %00) are
       refused, so the normalised path is the path that gets opened
     * only relative paths and file: URIs; jar:, ftp:, data: and every other
-      scheme are refused, as are "//host" and "\\host" network paths
+      scheme are refused, as are "//host", "\\host" and "file://host/"
+      network paths
 
   Remote files
     * https only, unless codeinclude.remote.allow-http=yes
@@ -36,6 +37,8 @@
   <xsl:param name="local-root" as="xs:string" select="''"/>
   <xsl:param name="input" as="xs:string" select="''"/>
   <xsl:param name="input-dir" as="xs:string" select="''"/>
+  <!-- Directory a relative codeinclude.local.root is resolved against: where dita was started -->
+  <xsl:param name="cwd" as="xs:string" select="''"/>
   <xsl:param name="allow-hosts" as="xs:string"
              select="'github.com raw.githubusercontent.com gitlab.com bitbucket.org codeberg.org'"/>
   <xsl:param name="allow-http" as="xs:string" select="'no'"/>
@@ -53,8 +56,15 @@
     <xsl:variable name="explicit" select="normalize-space($local-root)"/>
     <xsl:choose>
       <xsl:when test="$explicit = '*'">*</xsl:when>
-      <xsl:when test="$explicit ne ''">
+      <xsl:when test="$explicit ne '' and ci:is-absolute($explicit)">
         <xsl:sequence select="ci:as-directory(ci:to-uri($explicit))"/>
+      </xsl:when>
+      <xsl:when test="$explicit ne '' and normalize-space($cwd) ne ''">
+        <xsl:sequence select="ci:as-directory(string(resolve-uri($explicit, ci:as-directory(ci:to-uri(normalize-space($cwd))))))"/>
+      </xsl:when>
+      <xsl:when test="$explicit ne ''">
+        <!-- Relative root with nothing to resolve it against: read no local files -->
+        <xsl:sequence select="''"/>
       </xsl:when>
       <xsl:when test="normalize-space($input-dir) ne ''">
         <xsl:sequence select="ci:as-directory(ci:to-uri(normalize-space($input-dir)))"/>
@@ -67,6 +77,11 @@
       </xsl:otherwise>
     </xsl:choose>
   </xsl:variable>
+
+  <xsl:function name="ci:is-absolute" as="xs:boolean">
+    <xsl:param name="path" as="xs:string"/>
+    <xsl:sequence select="starts-with($path, '/') or matches($path, '^[A-Za-z]:[\\/]') or matches($path, '^file:', 'i')"/>
+  </xsl:function>
 
   <xsl:function name="ci:as-directory" as="xs:string">
     <xsl:param name="uri" as="xs:string"/>
@@ -97,6 +112,7 @@
       else if (matches($path, '%(2[eEfF]|5[cC]|00)')) then 'it contains an encoded dot, slash, backslash or NUL'
       else if (contains($path, '\')) then 'it contains a backslash'
       else if (starts-with($path, '//')) then 'network paths (//host/...) are not allowed'
+      else if (matches($path, '^file://[^/]', 'i')) then 'network paths (file://host/...) are not allowed'
       else if (matches($path, '^[A-Za-z][A-Za-z0-9+.\-]*:')
                and not(matches($path, '^(https?|file):', 'i')))
         then 'only https, http and file references are allowed'

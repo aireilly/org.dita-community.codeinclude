@@ -24,6 +24,8 @@ CASES = [
     ("code\\..\\..\\secret.env", REFUSED),
     ("jar:file:/tmp/x.jar!/a.txt", REFUSED),
     ("//evil.example.com/share/x.yaml", REFUSED),
+    ("file://evil.example.com/share/x.yaml", REFUSED),
+    ("file://localhost/etc/passwd", REFUSED),
     ("ftp://example.com/x.yaml", REFUSED),
     ("data:text/plain,hello", REFUSED),
     ("http://169.254.169.254/latest/meta-data/", REFUSED),
@@ -40,7 +42,32 @@ CASES = [
     ("https://evil.example.com/x.yaml", REFUSED),
     ("https://github.com/o/r/blob/main/x.yaml", ATTEMPTED),
     ("code/huge.txt", REFUSED),
+    ("code/ok.json#L1", INCLUDED),
+    ("code/ok.json#L5-L9", REFUSED),
+    ("code/ok.json#L0", REFUSED),
+    ("code/ok.json#token=NOPE,END", REFUSED),
 ]
+
+# Policies other than the default: (description, xslt params, href, expected)
+EXTRA = [
+    ("relative local.root resolved against cwd", {"local-root": "src", "cwd": "{work}"}, "code/ok.json", INCLUDED),
+    ("relative local.root does not widen access", {"local-root": "src", "cwd": "{work}"}, "../secret.env", REFUSED),
+    ("relative local.root without cwd reads nothing", {"local-root": "src"}, "code/ok.json", REFUSED),
+    ("local.root=* still refuses file://host", {"local-root": "*"}, "file://evil.example.com/x.yaml", REFUSED),
+]
+
+def transform(work, topic, params):
+    out = work / "out.dita"
+    with saxonche.PySaxonProcessor(license=False) as p:
+        ex = p.new_xslt30_processor().compile_stylesheet(stylesheet_file=str(XSL))
+        for name, value in params.items():
+            ex.set_parameter(name, p.make_string_value(value.format(work=work)))
+        ex.transform_to_file(source_file=str(topic), output_file=str(out))
+    return out.read_text()
+
+def body_of(result, block_id):
+    m = re.search(rf'<codeblock[^>]*id="{block_id}"[^>]*?(/>|>(.*?)</codeblock>)', result, re.S)
+    return (m.group(2) or "") if m else ""
 
 def main():
     work = pathlib.Path(tempfile.mkdtemp(prefix="codeinclude-sec-"))
@@ -56,16 +83,10 @@ def main():
     topic = work / "t.dita"
     topic.write_text(f'<topic class="- topic/topic " id="t" xtrf="{src.as_uri()}/t.dita"><title class="- topic/title ">T</title>'
                      f'<body class="- topic/body ">{blocks}</body></topic>')
-    out = work / "out.dita"
-    with saxonche.PySaxonProcessor(license=False) as p:
-        ex = p.new_xslt30_processor().compile_stylesheet(stylesheet_file=str(XSL))
-        ex.set_parameter("input", p.make_string_value(str(src / "map.ditamap")))
-        ex.transform_to_file(source_file=str(topic), output_file=str(out))
-    result = out.read_text()
+    result = transform(work, topic, {"input": str(src / "map.ditamap")})
     failures = 0
     for i, (href, want) in enumerate(CASES):
-        m = re.search(rf'<codeblock[^>]*id="c{i}"[^>]*?(/>|>(.*?)</codeblock>)', result, re.S)
-        body = (m.group(2) or "") if m else ""
+        body = body_of(result, f"c{i}")
         got = INCLUDED if body.strip() else REFUSED
         ok = got == want or (want == ATTEMPTED)
         if "hunter2" in body or "root:" in body:
@@ -76,7 +97,18 @@ def main():
     xss_ok = "<script>" not in xss and "&lt;script&gt;" in xss
     failures += not xss_ok
     print(f"{'PASS' if xss_ok else 'FAIL'}  escaped    file content containing <script>")
-    print(f"\n{len(CASES) + 1 - failures} passed, {failures} failed")
+    for desc, params, href, want in EXTRA:
+        one = work / "one.dita"
+        one.write_text(f'<topic class="- topic/topic " id="t" xtrf="{src.as_uri()}/t.dita"><title class="- topic/title ">T</title>'
+                       f'<body class="- topic/body "><codeblock class="+ topic/pre pr-d/codeblock " id="x">'
+                       f'<coderef class="+ topic/xref pr-d/coderef " href="{href}"/></codeblock></body></topic>')
+        body = body_of(transform(work, one, params), "x")
+        got = INCLUDED if body.strip() else REFUSED
+        ok = got == want and "hunter2" not in body
+        failures += not ok
+        print(f"{'PASS' if ok else 'FAIL'}  {want:9}  {href}  ({desc})")
+    total = len(CASES) + 1 + len(EXTRA)
+    print(f"\n{total - failures} passed, {failures} failed")
     sys.exit(1 if failures else 0)
 
 if __name__ == "__main__":

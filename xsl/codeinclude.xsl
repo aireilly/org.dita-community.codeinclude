@@ -81,7 +81,7 @@
     <xsl:copy>
       <xsl:apply-templates select="@* except @outputclass"/>
       <xsl:variable name="new-classes"
-                    select="$classes, ('language-' || $language)[$language ne '' and not($declared)]"/>
+                    select="$classes, ('language-' || $language)[$language ne '' and not($classes[matches(., '^(language|lang)-.')])]"/>
       <xsl:if test="exists($new-classes)">
         <xsl:attribute name="outputclass" select="string-join($new-classes, ' ')"/>
       </xsl:if>
@@ -150,33 +150,54 @@
             <xsl:with-param name="text" select="'Remote code reference follows a branch or tag, so its content can change without your sources changing. Pin it to a commit hash: ' || $href"/>
           </xsl:call-template>
         </xsl:if>
-        <xsl:variable name="target" select="if ($is-remote) then $url
-                                            else ($allowed[unparsed-text-available(., $charset)], $allowed[1])[1]"/>
-        <xsl:try>
-          <xsl:variable name="raw" select="unparsed-text($target, $charset)"/>
-          <xsl:choose>
-            <xsl:when test="string-length($raw) gt $ci:max-size">
-              <xsl:call-template name="ci:refuse">
-                <xsl:with-param name="text" select="'Code reference ' || $href || ' was not included: '
-                                                    || string-length($raw) || ' characters is over codeinclude.max-size ('
-                                                    || $ci:max-size || ')'"/>
-              </xsl:call-template>
-            </xsl:when>
-            <xsl:otherwise>
-              <xsl:value-of select="ci:select-lines(ci:normalize-newlines($raw), $fragment)"/>
-            </xsl:otherwise>
-          </xsl:choose>
-          <xsl:catch>
+        <xsl:variable name="read" select="ci:read(if ($is-remote) then $url else $allowed, $charset)"/>
+        <xsl:variable name="selected" select="if (exists($read?text)) then ci:select-lines(ci:normalize-newlines($read?text), $fragment) else ()"/>
+        <xsl:choose>
+          <xsl:when test="exists($read?error)">
             <xsl:call-template name="ci:refuse">
               <xsl:with-param name="id" select="'CINC001'"/>
-              <xsl:with-param name="text" select="'Unable to read code reference ' || $href || ' (' || $target
-                                                  || ', charset ' || $charset || '): ' || $err:description"/>
+              <xsl:with-param name="text" select="'Unable to read code reference ' || $href || ' (' || $read?uri
+                                                  || ', charset ' || $charset || '): ' || $read?error"/>
             </xsl:call-template>
-          </xsl:catch>
-        </xsl:try>
+          </xsl:when>
+          <xsl:when test="string-length($read?text) gt $ci:max-size">
+            <xsl:call-template name="ci:refuse">
+              <xsl:with-param name="text" select="'Code reference ' || $href || ' was not included: '
+                                                  || string-length($read?text) || ' characters is over codeinclude.max-size ('
+                                                  || $ci:max-size || ')'"/>
+            </xsl:call-template>
+          </xsl:when>
+          <xsl:when test="$fragment ne '' and empty($selected)">
+            <xsl:call-template name="ci:refuse">
+              <xsl:with-param name="id" select="'CINC007'"/>
+              <xsl:with-param name="text" select="'Code reference ' || $href || ' was not included: the fragment #'
+                                                  || $fragment || ' selects no lines'"/>
+            </xsl:call-template>
+          </xsl:when>
+          <xsl:otherwise>
+            <xsl:value-of select="$selected"/>
+          </xsl:otherwise>
+        </xsl:choose>
       </xsl:otherwise>
     </xsl:choose>
   </xsl:template>
+
+  <!-- Read the first URI that can be read: map {'uri', 'text'}, or map {'uri', 'error'} for the first one if none can -->
+  <xsl:function name="ci:read" as="map(xs:string, xs:string)">
+    <xsl:param name="uris" as="xs:string+"/>
+    <xsl:param name="charset" as="xs:string"/>
+    <xsl:variable name="first" as="map(xs:string, xs:string)">
+      <xsl:try>
+        <xsl:sequence select="map {'uri': $uris[1], 'text': unparsed-text($uris[1], $charset)}"/>
+        <xsl:catch>
+          <xsl:sequence select="map {'uri': $uris[1], 'error': string($err:description)}"/>
+        </xsl:catch>
+      </xsl:try>
+    </xsl:variable>
+    <xsl:sequence select="if (exists($first?error) and count($uris) gt 1)
+                          then (ci:read(tail($uris), $charset)[exists(?text)], $first)[1]
+                          else $first"/>
+  </xsl:function>
 
   <!-- Report a coderef that was not included; stops the build in strict mode -->
   <xsl:template name="ci:refuse">
@@ -204,21 +225,6 @@
        Language detection
        =================================================================== -->
 
-  <xsl:function name="ci:language-from-outputclass" as="xs:string?">
-    <xsl:param name="classes" as="xs:string*"/>
-    <xsl:sequence select="(for $c in $classes return
-                             if (matches($c, '^(language|lang)-.+'))
-                             then (ci:canonical-language(replace($c, '^(language|lang)-', ''))[. ne ''],
-                                   ci:safe-name(replace($c, '^(language|lang)-', ''))[. ne ''])[1]
-                             else ci:canonical-language($c)[. ne ''])[1]"/>
-  </xsl:function>
-
-  <!-- Language names end up in class and data- attributes: keep them to a safe alphabet -->
-  <xsl:function name="ci:safe-name" as="xs:string">
-    <xsl:param name="s" as="xs:string"/>
-    <xsl:sequence select="substring(replace(lower-case($s), '[^a-z0-9+#_.\-]', ''), 1, 32)"/>
-  </xsl:function>
-
   <xsl:function name="ci:language-from-coderefs" as="xs:string?">
     <xsl:param name="codeblock" as="element()"/>
     <xsl:variable name="ref" select="$codeblock/*[contains(@class, ' pr-d/coderef ')][1]"/>
@@ -242,39 +248,45 @@
     <xsl:param name="url" as="xs:string"/>
     <xsl:sequence select="
       if (matches($url, '^https?://(www\.)?github\.com/[^/]+/[^/]+/(blob|raw)/', 'i'))
-        then replace(replace($url, '^https?://(www\.)?github\.com/([^/]+)/([^/]+)/(blob|raw)/', 'https://raw.githubusercontent.com/$2/$3/', 'i'),
-                     '[?&amp;]plain=1', '')
-      else if (contains($url, '/-/blob/')) then replace($url, '/-/blob/', '/-/raw/')
+        then ci:drop-query-param(
+               replace($url, '^https?://(www\.)?github\.com/([^/]+)/([^/]+)/(blob|raw)/', 'https://raw.githubusercontent.com/$2/$3/', 'i'),
+               'plain')
+      else if (matches($url, '^https?://[^/]+/[^?#]+?/-/blob/', 'i'))
+        then replace($url, '^(https?://[^/]+/[^?#]+?)/-/blob/', '$1/-/raw/', 'i')
       else if (matches($url, '^https?://bitbucket\.org/[^/]+/[^/]+/src/', 'i'))
         then replace($url, '^(https?://bitbucket\.org/[^/]+/[^/]+)/src/', '$1/raw/', 'i')
-      else if (matches($url, '/src/(branch|tag|commit)/'))
-        then replace($url, '/src/(branch|tag|commit)/', '/raw/$1/')
+      (: Gitea and Forgejo run on any host, so match the path shape: /owner/repo/src/branch|tag|commit/ :)
+      else if (matches($url, '^https?://[^/]+/[^/]+/[^/]+/src/(branch|tag|commit)/', 'i')
+               and not(matches($url, '^https?://(raw\.githubusercontent\.com|github\.com|bitbucket\.org)/', 'i')))
+        then replace($url, '^(https?://[^/]+/[^/]+/[^/]+)/src/(branch|tag|commit)/', '$1/raw/$2/', 'i')
       else $url"/>
   </xsl:function>
 
-  <!-- Absolute URIs to try, best first -->
+  <!-- Remove one query parameter, keeping any others -->
+  <xsl:function name="ci:drop-query-param" as="xs:string">
+    <xsl:param name="url" as="xs:string"/>
+    <xsl:param name="name" as="xs:string"/>
+    <xsl:variable name="base" select="replace($url, '\?.*$', '')"/>
+    <xsl:variable name="kept" select="tokenize(substring-after($url, '?'), '&amp;')[. ne ''][not(. = $name or starts-with(., $name || '='))]"/>
+    <xsl:sequence select="$base || (if (exists($kept)) then '?' || string-join($kept, '&amp;') else '')"/>
+  </xsl:function>
+
+  <!-- Local URIs to try, best first -->
   <xsl:function name="ci:candidates" as="xs:string*">
     <xsl:param name="coderef" as="element()"/>
     <xsl:param name="path" as="xs:string"/>
-    <xsl:choose>
-      <xsl:when test="ci:is-remote($path)">
-        <xsl:sequence select="ci:raw-url($path)"/>
-      </xsl:when>
-      <xsl:otherwise>
-        <xsl:variable name="temp-target" select="string(resolve-uri($path, base-uri($coderef)))"/>
-        <!-- 1. the job: temp location of the code file -> original source -->
-        <xsl:variable name="from-job" as="xs:string*">
-          <xsl:if test="exists($ci:job) and $temp-dir-url ne ''">
-            <xsl:variable name="rel" select="ci:relative-to(ci:path-of($temp-target), ci:path-of($temp-dir-url))"/>
-            <xsl:sequence select="(key('ci:job-file', $rel, $ci:job), key('ci:job-file', ci:decode($rel), $ci:job))[@src][1]/@src/string()"/>
-          </xsl:if>
-        </xsl:variable>
-        <!-- 2. the source file the coderef came from (debug attribute) -->
-        <xsl:variable name="xtrf" select="$coderef/ancestor-or-self::*[@xtrf][1]/@xtrf"/>
-        <xsl:variable name="from-xtrf" select="if (exists($xtrf)) then string(resolve-uri($path, ci:to-uri($xtrf))) else ()"/>
-        <xsl:sequence select="distinct-values(($from-job, $from-xtrf, $temp-target))"/>
-      </xsl:otherwise>
-    </xsl:choose>
+    <xsl:variable name="temp-target" select="string(resolve-uri($path, base-uri($coderef)))"/>
+    <!-- 1. the job: temp location of the code file -> original source -->
+    <xsl:variable name="from-job" as="xs:string*">
+      <xsl:if test="exists($ci:job) and $temp-dir-url ne ''">
+        <xsl:variable name="rel" select="ci:relative-to(ci:path-of($temp-target), ci:path-of($temp-dir-url))"/>
+        <xsl:sequence select="(key('ci:job-file', $rel, $ci:job), key('ci:job-file', ci:decode($rel), $ci:job))[@src][1]/@src/string()"/>
+      </xsl:if>
+    </xsl:variable>
+    <!-- 2. the source file the coderef came from (debug attribute) -->
+    <xsl:variable name="xtrf" select="$coderef/ancestor-or-self::*[@xtrf][1]/@xtrf"/>
+    <xsl:variable name="from-xtrf" select="if (exists($xtrf)) then string(resolve-uri($path, ci:to-uri($xtrf))) else ()"/>
+    <xsl:sequence select="distinct-values(($from-job, $from-xtrf, $temp-target))"/>
   </xsl:function>
 
   <xsl:function name="ci:to-uri" as="xs:string">
@@ -320,7 +332,8 @@
        Line selection
        =================================================================== -->
 
-  <xsl:function name="ci:select-lines" as="xs:string">
+  <!-- The selected lines, or the empty sequence when the fragment selects none -->
+  <xsl:function name="ci:select-lines" as="xs:string?">
     <xsl:param name="text" as="xs:string"/>
     <xsl:param name="fragment" as="xs:string"/>
     <xsl:variable name="all" select="tokenize($text, '\n')"/>
@@ -360,7 +373,7 @@
         </xsl:otherwise>
       </xsl:choose>
     </xsl:variable>
-    <xsl:sequence select="string-join($selected, '&#10;')"/>
+    <xsl:sequence select="if (exists($selected)) then string-join($selected, '&#10;') else ()"/>
   </xsl:function>
 
   <!-- Same semantics as DITA-OT's AnchorRange: lines strictly between the start and end anchors -->

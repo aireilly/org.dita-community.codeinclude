@@ -1,4 +1,4 @@
-name: Publish sample docs
+name: Build, release and publish
 
 on:
   push:
@@ -7,49 +7,102 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
-  DITA_OT_IMAGE: quay.io/rhn_support_aireilly/dita-ot
+  # Pinned so an image rebuild cannot change or break the output without a change here.
+  # To update: podman pull quay.io/rhn_support_aireilly/dita-ot && podman image inspect --format '{{.Digest}}' quay.io/rhn_support_aireilly/dita-ot
+  DITA_OT_IMAGE: quay.io/rhn_support_aireilly/dita-ot@sha256:6eb59ba1fc8ce283e405578682c0de3c07f66fb9f9cc1deab9b24754010f4515
+  PLUGIN_ID: org.dita-community.codeinclude
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Security tests
+        run: |
+          pip install saxonche
+          python3 test/run_security_tests.py
+
+  build:
+    needs: test
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read plugin version
+        id: version
+        run: echo "version=$(sed -n 's/.*<plugin id="[^"]*" version="\([^"]*\)".*/\1/p' plugin.xml)" >> "$GITHUB_OUTPUT"
 
       - name: Package plugin
-        run: git archive --format=zip --prefix=org.dita-community.codeinclude/ -o "$RUNNER_TEMP/plugin.zip" HEAD
+        # .gitattributes keeps .github out of the zip
+        run: |
+          mkdir -p dist
+          git archive --format=zip --prefix="$PLUGIN_ID/" -o "dist/$PLUGIN_ID.zip" HEAD
 
       - name: Pull DITA-OT image
         run: podman pull "$DITA_OT_IMAGE"
 
-      - name: Install plugin and build sample
+      - name: Install plugin and build the sample as the README describes
         run: |
           mkdir -p _site
           podman run --rm \
-            -v "$PWD:/src:ro" \
-            -v "$RUNNER_TEMP/plugin.zip:/plugin.zip:ro" \
+            -v "$PWD/dist:/dist:ro" \
             -v "$PWD/_site:/out" \
             "$DITA_OT_IMAGE" \
-            sh -c 'dita install /plugin.zip && dita -i /src/samples/codeinclude-sample.ditamap -f html5 -o /out --codeinclude.local.root=/src --codeinclude.fail-on-error=yes'
+            sh -c 'dita install "/dist/$0.zip" && cd /opt/app && dita -i "plugins/$0/samples/codeinclude-sample.ditamap" -f html5 -o /out --codeinclude.remote.require-pinned=yes --codeinclude.fail-on-error=yes' "$PLUGIN_ID"
           test -f _site/index.html
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-artifact@v7
+        with:
+          name: plugin
+          path: dist/${{ env.PLUGIN_ID }}.zip
+
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
   deploy:
     needs: build
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
+
+  release:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: plugin
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ needs.build.outputs.version }}-${{ github.run_number }}
+        run: |
+          gh release create "$TAG" "$PLUGIN_ID.zip" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$PLUGIN_ID $TAG" \
+            --notes "Built from $GITHUB_SHA. Install with: dita install https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$PLUGIN_ID.zip" \
+            --latest

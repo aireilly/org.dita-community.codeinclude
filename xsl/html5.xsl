@@ -8,6 +8,8 @@
   * Pages that contain build-time highlighted code get a small embedded
     stylesheet (switch off with codeinclude.html.css=none and style the
     .hl-* classes in your own args.css instead).
+  * With codeinclude.enabled=no none of this applies and codeblocks render
+    as they do without the plugin.
 -->
 <xsl:stylesheet version="3.0"
                 xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -15,17 +17,21 @@
                 xmlns:ci="urn:dita-community:codeinclude"
                 exclude-result-prefixes="#all">
 
+  <!-- Same language rules as the preprocessing step -->
+  <xsl:include href="languages.xsl"/>
+
   <xsl:param name="codeinclude.html.css" as="xs:string" select="'inline'"/>
+  <xsl:param name="codeinclude.enabled" as="xs:string" select="'yes'"/>
+
+  <xsl:variable name="ci:enabled" as="xs:boolean"
+                select="not(lower-case(normalize-space($codeinclude.enabled)) = ('no', 'false', '0', 'off'))"/>
 
   <xsl:function name="ci:codeblock-language" as="xs:string?">
     <xsl:param name="codeblock" as="element()"/>
-    <xsl:sequence select="(tokenize(normalize-space($codeblock/@outputclass), ' ')
-                            [matches(., '^(language|lang)-.+')]
-                            ! replace(lower-case(replace(., '^(language|lang)-', '')), '[^a-z0-9+#_.\-]', '')
-                            [. ne ''])[1]"/>
+    <xsl:sequence select="ci:language-from-outputclass(tokenize(normalize-space($codeblock/@outputclass), ' '))"/>
   </xsl:function>
 
-  <xsl:template match="*[contains(@class, ' pr-d/codeblock ')][exists(ci:codeblock-language(.))]" priority="10">
+  <xsl:template match="*[contains(@class, ' pr-d/codeblock ')][$ci:enabled][exists(ci:codeblock-language(.))]" priority="10">
     <xsl:variable name="language" select="ci:codeblock-language(.)"/>
     <xsl:apply-templates select="*[contains(@class, ' ditaot-d/ditaval-startprop ')]" mode="out-of-line"/>
     <xsl:call-template name="spec-title-nospace"/>
@@ -43,7 +49,7 @@
   <!-- Embedded token colours, only on pages that need them -->
   <xsl:template match="/ | node()" mode="gen-user-head" priority="5">
     <xsl:next-match/>
-    <xsl:if test="$codeinclude.html.css = 'inline'
+    <xsl:if test="$ci:enabled and $codeinclude.html.css = 'inline'
                   and exists(root(.)//*[contains(@class, ' pr-d/codeblock ')]
                                       //*[contains(@class, ' topic/ph ')][starts-with(@outputclass, 'hl-')])">
       <style type="text/css" data-source="org.dita-community.codeinclude">

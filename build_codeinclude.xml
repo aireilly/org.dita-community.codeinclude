@@ -10,9 +10,10 @@
     and remote URLs alike) and highlights the result.
   -->
   <target name="codeinclude.init">
+    <!-- Without a default, isfalse sees the unexpanded "${codeinclude.enabled}" and switches the plugin off -->
+    <property name="codeinclude.enabled" value="yes"/>
     <condition property="codeinclude.skip">
-      <!-- isfalse would treat the unexpanded "${codeinclude.enabled}" as false when the parameter is not passed -->
-      <equals arg1="${codeinclude.enabled}" arg2="no"/>
+      <isfalse value="${codeinclude.enabled}"/>
     </condition>
     <!-- build-step.coderef is the supported switch; setting preprocess.coderef.skip directly fails with DOTA015F -->
     <property name="build-step.coderef" value="false" unless:set="codeinclude.skip"/>
@@ -51,6 +52,7 @@
         <param name="input" expression="${args.input}" if:set="args.input"/>
         <param name="input-dir" expression="${args.input.dir}" if:set="args.input.dir"/>
         <param name="local-root" expression="${codeinclude.local.root}"/>
+        <param name="cwd" expression="${user.dir}"/>
         <param name="allow-hosts" expression="${codeinclude.remote.allow-hosts}"/>
         <param name="allow-http" expression="${codeinclude.remote.allow-http}"/>
         <param name="require-pinned" expression="${codeinclude.remote.require-pinned}"/>

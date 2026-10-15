@@ -72,13 +72,17 @@
       'go.mod':'go', 'cargo.lock':'toml'
     }"/>
 
-  <!-- Normalise an alias, extension or MIME-ish name to a canonical language, or '' -->
+  <!-- Normalise an alias, extension or MIME type to a canonical language, or ''.
+       In a MIME type the structured-syntax suffix wins: application/ld+json is json. -->
   <xsl:function name="ci:canonical-language" as="xs:string">
     <xsl:param name="name" as="xs:string?"/>
-    <xsl:variable name="n" select="lower-case(normalize-space($name))
-                                   => replace('^(text|application)/(x-)?', '')
-                                   => replace('\+.*$', '')"/>
-    <xsl:sequence select="if ($n = '') then '' else ($ci:aliases($n), '')[1]"/>
+    <xsl:variable name="n" select="lower-case(normalize-space($name))"/>
+    <xsl:variable name="subtype" select="if (matches($n, '^[a-z]+/')) then replace(substring-after($n, '/'), '^x-', '') else ()"/>
+    <xsl:sequence select="if ($n = '') then ''
+                          else ($ci:aliases($n),
+                                $subtype ! $ci:aliases(.),
+                                $subtype[contains(., '+')] ! $ci:aliases(tokenize(., '\+')[last()]),
+                                '')[1]"/>
   </xsl:function>
 
   <!-- Detect a language from a path or URL -->
@@ -92,6 +96,23 @@
                            if ($ext != '') then $ci:aliases($ext) else (),
                            '')[1]"/>
   </xsl:function>
+
+  <!-- Language named by codeblock/@outputclass: language-x, lang-x or a bare known name such as yaml -->
+  <xsl:function name="ci:language-from-outputclass" as="xs:string?">
+    <xsl:param name="classes" as="xs:string*"/>
+    <xsl:sequence select="(for $c in $classes return
+                             if (matches($c, '^(language|lang)-.+'))
+                             then (ci:canonical-language(replace($c, '^(language|lang)-', ''))[. ne ''],
+                                   ci:safe-name(replace($c, '^(language|lang)-', ''))[. ne ''])[1]
+                             else ci:canonical-language($c)[. ne ''])[1]"/>
+  </xsl:function>
+
+  <!-- Language names end up in class and data- attributes: keep them to a safe alphabet -->
+  <xsl:function name="ci:safe-name" as="xs:string">
+    <xsl:param name="s" as="xs:string"/>
+    <xsl:sequence select="substring(replace(lower-case($s), '[^a-z0-9+#_.\-]', ''), 1, 32)"/>
+  </xsl:function>
+
 
   <!-- ===================================================================
        Shared regex building blocks

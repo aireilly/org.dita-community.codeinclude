@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <params xmlns:if="ant:if">
   <param name="codeinclude.html.css" expression="${codeinclude.html.css}" if:set="codeinclude.html.css"/>
+  <param name="codeinclude.enabled" expression="${codeinclude.enabled}" if:set="codeinclude.enabled"/>
 </params>

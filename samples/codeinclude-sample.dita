@@ -7,12 +7,12 @@
       <title>Remote file from GitHub</title>
       <p>A GitHub page URL is rewritten to the raw file. The language comes from the
         <filepath>.yaml</filepath> extension.</p>
-      <codeblock><coderef scope="external" href="https://github.com/red-hat-data-services/kserve/blob/rhoai-3.6/config/llmisvcconfig/config-llm-scheduler-eppconfig-default.yaml"/></codeblock>
+      <codeblock><coderef scope="external" href="https://github.com/red-hat-data-services/kserve/blob/287b7c925e9a0e3243c2a7477550d346c8027f7a/config/llmisvcconfig/config-llm-scheduler-eppconfig-default.yaml"/></codeblock>
     </section>
     <section>
       <title>Selected lines of a remote file</title>
       <p>GitHub-style <codeph>#L13-L19</codeph> fragments select lines; <codeph>normalize-space</codeph> removes the shared indentation.</p>
-      <codeblock outputclass="normalize-space"><coderef scope="external" href="https://github.com/red-hat-data-services/kserve/blob/rhoai-3.6/config/llmisvcconfig/config-llm-scheduler-eppconfig-default.yaml#L13-L19"/></codeblock>
+      <codeblock outputclass="normalize-space"><coderef scope="external" href="https://github.com/red-hat-data-services/kserve/blob/287b7c925e9a0e3243c2a7477550d346c8027f7a/config/llmisvcconfig/config-llm-scheduler-eppconfig-default.yaml#L13-L19"/></codeblock>
     </section>
     <section>
       <title>Local files</title>

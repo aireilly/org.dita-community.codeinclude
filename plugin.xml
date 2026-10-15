@@ -16,6 +16,8 @@
   <feature extension="depend.preprocess.pre" value="codeinclude.init"/>
   <!-- Runs after every preprocess variant, once temp topics are final -->
   <feature extension="depend.preprocess.post" value="codeinclude.process"/>
+  <!-- Keep topicpull from treating unresolved coderefs as links (DOTX031E) -->
+  <feature extension="dita.xsl.topicpull" file="xsl/topicpull.xsl"/>
 
   <!-- Rendering -->
   <feature extension="dita.xsl.html5" file="xsl/html5.xsl"/>
